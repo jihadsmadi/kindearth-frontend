@@ -1,28 +1,17 @@
-"use client"
-import { GetCSRF } from "@/services/api/auth/authService";
-import { useEffect } from "react";
+import "./global.css";
+import { CSRFProvider } from "@/components/providers/CSRFProvider";
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  useEffect(() => {
-  const fetchCSRF = async () => {
-    try {
-      console.log("getting csrf")
-      await GetCSRF()
-    } catch (error) {
-      console.error("CSRF fetch error:", error);
-    }
-  };
-  fetchCSRF();
-}, []);
-  
   return (
-    <html lang="en">
-      <body>
-        {children}
+    <html lang="en" className="h-full">
+      <body className="h-full">
+        <CSRFProvider>
+          {children}
+        </CSRFProvider>
       </body>
     </html>
   );
