@@ -23,13 +23,13 @@ export default function Footer() {
     }
   ]
 
-  const socialIcons = [
-    { icon: Facebook, href: "#", label: "Facebook" },
-    { icon: Twitter, href: "#", label: "Twitter" },
-    { icon: Instagram, href: "#", label: "Instagram" }
-  ]
-
   const paymentMethods = ["Visa", "Mastercard", "PayPal", "Stripe"]
+
+  const socialLinks = [
+    { name: "Facebook", href: "#", icon: Facebook },
+    { name: "Twitter", href: "#", icon: Twitter },
+    { name: "Instagram", href: "#", icon: Instagram }
+  ]
 
   return (
     <footer className="bg-muted/50 border-t">
@@ -91,17 +91,16 @@ export default function Footer() {
             {/* Social Media */}
             <div className="flex items-center space-x-4">
               <span className="text-muted-foreground font-medium">Follow us:</span>
-              {socialIcons.map((social, index) => (
-                <motion.a
-                  key={index}
-                  href={social.href}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="text-muted-foreground hover:text-blue-600 transition-colors duration-300"
-                  aria-label={social.label}
+              {socialLinks.map((link) => (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  className="text-gray-400 hover:text-white transition-colors"
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
-                  <social.icon className="h-5 w-5" />
-                </motion.a>
+                  <link.icon className="h-6 w-6" />
+                </a>
               ))}
             </div>
 
@@ -109,7 +108,7 @@ export default function Footer() {
             <div className="flex items-center space-x-4">
               <span className="text-muted-foreground font-medium">Payment methods:</span>
               <div className="flex space-x-2">
-                {paymentMethods.map((method, index) => (
+                {paymentMethods.map((method) => (
                   <span
                     key={method}
                     className="text-xs bg-background px-2 py-1 rounded border text-muted-foreground"

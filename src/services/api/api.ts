@@ -1,5 +1,6 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import { refreshToken } from './auth/authService';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -9,11 +10,12 @@ const api = axios.create({
 // Automatically add CSRF token to requests
 api.interceptors.request.use((config) => {
   const csrfToken = Cookies.get('csrf-cookie');
-  console.log("from interceptore", csrfToken)
   if (csrfToken)
     config.headers['X-CSRF-TOKEN'] = csrfToken;
-  
+
   return config;
+}, (error) => {
+  return Promise.reject(error);
 });
 
 // Handle token refresh automatically
@@ -22,22 +24,28 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
+    // Don't auto-refresh for auth endpoints (login, register, etc.)
+    const isAuthEndpoint = originalRequest.url?.includes('/auth/');
+    
     // 401 = Unauthorized (token expired)
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true; // Prevent infinite loop
       
       try {
         // Try refresh token
-        await axios.post('/auth/refreshToken', {}, {
-          withCredentials: true // Send refresh_token cookie
-        });
+        const result = await refreshToken();
         
-        // Retry original request
-        return api(originalRequest); 
-      } catch (refreshError) {
+        if (result.success) {
+          // Retry original request
+          return api(originalRequest); 
+        } else {
+          // Clear tokens on failure
+          Cookies.remove('access_token');
+          Cookies.remove('refresh_token');
+          window.location.href = '/login';
+        }
+      } catch {
         // Clear tokens on failure
-        console.log(refreshError);
-
         Cookies.remove('access_token');
         Cookies.remove('refresh_token');
         window.location.href = '/login';

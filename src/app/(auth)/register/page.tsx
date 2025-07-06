@@ -3,13 +3,21 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowLeft, Store } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
+import { PasswordStrength } from "@/components/ui/password-strength"
+import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowLeft, Store, AlertCircle } from "lucide-react"
 import Link from "next/link"
+import { register } from "@/services/api/auth/authService"
+import { validatePassword } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 
 export default function RegisterPage() {
+  const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [userType, setUserType] = useState<"customer" | "vendor">("customer")
+  const [isLoading, setIsLoading] = useState(false)
+  const [generalError, setGeneralError] = useState<string | null>(null)
+  const [userType, setUserType] = useState<"Customer" | "Vendor">("Customer")
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -24,46 +32,73 @@ export default function RegisterPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
-    // Clear error when user starts typing
+    // Clear errors when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: "" }))
     }
+    if (generalError) {
+      setGeneralError(null)
+    }
+  }
+
+  // Phone validation function
+  const validatePhone = (phone: string): boolean => {
+    // Remove all non-digit characters except +
+    const cleanPhone = phone.replace(/[^\d+]/g, '')
+    // Check if it's 8-16 digits, can start with + or country code
+    return /^(\+?\d{8,16})$/.test(cleanPhone)
   }
 
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {}
 
+    // First Name validation
     if (!formData.firstName) {
       newErrors.firstName = "First name is required"
+    } else if (formData.firstName.length > 50) {
+      newErrors.firstName = "First name must be 50 characters or less"
     }
 
+    // Last Name validation
     if (!formData.lastName) {
       newErrors.lastName = "Last name is required"
+    } else if (formData.lastName.length > 50) {
+      newErrors.lastName = "Last name must be 50 characters or less"
     }
 
+    // Email validation
     if (!formData.email) {
       newErrors.email = "Email is required"
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Please enter a valid email"
     }
 
+    // Phone validation
     if (!formData.phone) {
       newErrors.phone = "Phone number is required"
+    } else if (!validatePhone(formData.phone)) {
+      newErrors.phone = "Please enter a valid phone number (8-16 digits, can start with +)"
     }
 
+    // Password validation
     if (!formData.password) {
       newErrors.password = "Password is required"
-    } else if (formData.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters"
+    } else {
+      const passwordValidation = validatePassword(formData.password)
+      if (!passwordValidation.isValid) {
+        newErrors.password = "Password does not meet requirements"
+      }
     }
 
+    // Confirm Password validation
     if (!formData.confirmPassword) {
       newErrors.confirmPassword = "Please confirm your password"
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match"
     }
 
-    if (userType === "vendor" && !formData.storeName) {
+    // Store Name validation for vendors
+    if (userType === "Vendor" && !formData.storeName) {
       newErrors.storeName = "Store name is required for vendors"
     }
 
@@ -71,11 +106,63 @@ export default function RegisterPage() {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (validateForm()) {
-      // Handle registration logic here
-      console.log("Registration attempt:", { ...formData, userType })
+    
+    if (!validateForm()) {
+      return
+    }
+
+    setIsLoading(true)
+    setGeneralError(null)
+
+    try {
+      // Prepare registration data according to backend specification
+      const registrationData = {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        role: userType,
+        ...(userType === "Vendor" && { storeName: formData.storeName })
+      }
+
+      const result = await register(registrationData)
+      
+      if (result.success) {
+        // Redirect to login page with success message
+        router.push('/login?registered=true')
+      } else {
+        // Handle detailed error information
+        let errorMessage = result.error || 'Registration failed'
+        
+        // If there are validation details, format them
+        if (result.details) {
+          if (Array.isArray(result.details)) {
+            // Handle array of error messages
+            const detailMessages = result.details.join('; ')
+            if (detailMessages) {
+              errorMessage = detailMessages
+            }
+          } else if (typeof result.details === 'object') {
+            // Handle object with field names
+            const detailMessages = Object.entries(result.details)
+              .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+              .join('; ')
+            if (detailMessages) {
+              errorMessage = `${errorMessage} ${detailMessages}`
+            }
+          }
+        }
+        
+        setGeneralError(errorMessage)
+      }
+    } catch (error) {
+      setGeneralError('An unexpected error occurred. Please try again.')
+      console.error('Registration error:', error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -101,6 +188,16 @@ export default function RegisterPage() {
             <p className="text-gray-600">Create your account and start your journey</p>
           </div>
 
+          {/* General Error */}
+          {generalError && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-500" />
+                <p className="text-red-700 text-sm">{generalError}</p>
+              </div>
+            </div>
+          )}
+
           {/* User Type Selection */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -109,24 +206,26 @@ export default function RegisterPage() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => setUserType("customer")}
+                onClick={() => setUserType("Customer")}
+                disabled={isLoading}
                 className={`p-4 rounded-lg border-2 transition-all duration-300 ${
-                  userType === "customer"
+                  userType === "Customer"
                     ? "border-blue-600 bg-blue-50 text-blue-600"
                     : "border-gray-200 hover:border-gray-300"
-                }`}
+                } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 <User className="h-6 w-6 mx-auto mb-2" />
                 <span className="font-medium">Customer</span>
               </button>
               <button
                 type="button"
-                onClick={() => setUserType("vendor")}
+                onClick={() => setUserType("Vendor")}
+                disabled={isLoading}
                 className={`p-4 rounded-lg border-2 transition-all duration-300 ${
-                  userType === "vendor"
+                  userType === "Vendor"
                     ? "border-blue-600 bg-blue-50 text-blue-600"
                     : "border-gray-200 hover:border-gray-300"
-                }`}
+                } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 <Store className="h-6 w-6 mx-auto mb-2" />
                 <span className="font-medium">Vendor</span>
@@ -149,9 +248,11 @@ export default function RegisterPage() {
                   placeholder="John"
                   value={formData.firstName}
                   onChange={handleInputChange}
+                  disabled={isLoading}
+                  maxLength={50}
                   className={`border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.firstName ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 />
                 {errors.firstName && (
                   <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>
@@ -168,9 +269,11 @@ export default function RegisterPage() {
                   placeholder="Doe"
                   value={formData.lastName}
                   onChange={handleInputChange}
+                  disabled={isLoading}
+                  maxLength={50}
                   className={`border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.lastName ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 />
                 {errors.lastName && (
                   <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>
@@ -192,9 +295,10 @@ export default function RegisterPage() {
                   placeholder="john@example.com"
                   value={formData.email}
                   onChange={handleInputChange}
+                  disabled={isLoading}
                   className={`pl-10 pr-4 py-3 border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.email ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 />
               </div>
               {errors.email && (
@@ -213,12 +317,13 @@ export default function RegisterPage() {
                   id="phone"
                   name="phone"
                   type="tel"
-                  placeholder="+1 (555) 123-4567"
+                  placeholder="1234567890"
                   value={formData.phone}
                   onChange={handleInputChange}
+                  disabled={isLoading}
                   className={`pl-10 pr-4 py-3 border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.phone ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 />
               </div>
               {errors.phone && (
@@ -227,7 +332,7 @@ export default function RegisterPage() {
             </div>
 
             {/* Store Name Field (Vendor Only) */}
-            {userType === "vendor" && (
+            {userType === "Vendor" && (
               <div>
                 <label htmlFor="storeName" className="block text-sm font-medium text-gray-700 mb-2">
                   Store Name
@@ -241,9 +346,10 @@ export default function RegisterPage() {
                     placeholder="My Awesome Store"
                     value={formData.storeName}
                     onChange={handleInputChange}
+                    disabled={isLoading}
                     className={`pl-10 pr-4 py-3 border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       errors.storeName ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                    }`}
+                    } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                   />
                 </div>
                 {errors.storeName && (
@@ -266,20 +372,28 @@ export default function RegisterPage() {
                   placeholder="Create a strong password"
                   value={formData.password}
                   onChange={handleInputChange}
+                  disabled={isLoading}
                   className={`pl-10 pr-12 py-3 border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.password ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  disabled={isLoading}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
               {errors.password && (
                 <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+              )}
+              {/* Password Strength Indicator */}
+              {formData.password && (
+                <div className="mt-2">
+                  <PasswordStrength password={formData.password} />
+                </div>
               )}
             </div>
 
@@ -297,14 +411,16 @@ export default function RegisterPage() {
                   placeholder="Confirm your password"
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
+                  disabled={isLoading}
                   className={`pl-10 pr-12 py-3 border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.confirmPassword ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  disabled={isLoading}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
                 >
                   {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -319,7 +435,8 @@ export default function RegisterPage() {
               <input
                 type="checkbox"
                 id="terms"
-                className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                disabled={isLoading}
+                className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
               />
               <label htmlFor="terms" className="ml-2 text-sm text-gray-600">
                 I agree to the{" "}
@@ -336,9 +453,17 @@ export default function RegisterPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 rounded-lg transition-all duration-300 hover:shadow-lg hover:scale-[1.02]"
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 rounded-lg transition-all duration-300 hover:shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              Create Account
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Spinner size="sm" className="text-white" />
+                  Creating Account...
+                </div>
+              ) : (
+                "Create Account"
+              )}
             </Button>
           </form>
 

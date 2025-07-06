@@ -1,5 +1,6 @@
 import "./global.css";
 import { CSRFProvider } from "@/components/providers/CSRFProvider";
+import { UserProvider } from "@/components/providers/UserProvider";
 
 export default function RootLayout({
   children,
@@ -10,7 +11,9 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className="h-full">
         <CSRFProvider>
-          {children}
+          <UserProvider>
+            {children}
+          </UserProvider>
         </CSRFProvider>
       </body>
     </html>

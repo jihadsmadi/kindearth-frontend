@@ -80,8 +80,8 @@ export default function CustomerReviewsSection() {
                 </div>
               </div>
 
-              <p className="text-muted-foreground text-base leading-relaxed mb-4">
-                "{reviews[currentReview].text}"
+              <p className="text-gray-600 text-center">
+                &ldquo;{reviews[currentReview].text}&rdquo;
               </p>
 
               <div className="flex items-center justify-between">

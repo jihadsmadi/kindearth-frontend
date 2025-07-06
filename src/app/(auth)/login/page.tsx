@@ -1,25 +1,52 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
+import { Alert } from "@/components/ui/alert"
 import { Eye, EyeOff, Mail, Lock, ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { login } from "@/services/api/auth/authService"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useUser } from "@/components/providers/UserProvider"
 
 export default function LoginPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { setUser } = useUser()
   const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [generalError, setGeneralError] = useState<string | null>(null)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   })
+  const [rememberMe, setRememberMe] = useState(false)
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
+
+  // Check if user just registered
+  useEffect(() => {
+    if (searchParams.get('registered') === 'true') {
+      setShowSuccessMessage(true)
+      // Auto-hide success message after 5 seconds
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
-    // Clear error when user starts typing
+    // Clear errors when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: "" }))
+    }
+    if (generalError) {
+      setGeneralError(null)
     }
   }
 
@@ -34,19 +61,63 @@ export default function LoginPage() {
 
     if (!formData.password) {
       newErrors.password = "Password is required"
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters"
     }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (validateForm()) {
-      // Handle login logic here
-      console.log("Login attempt:", formData)
+    
+    // Prevent double submission
+    if (isLoading) {
+      return
+    }
+    
+    if (!validateForm()) {
+      return
+    }
+
+    setIsLoading(true)
+    setGeneralError(null)
+
+    try {
+      const result = await login(formData)
+      
+      if (result.success && result.data) {
+        const userData = result.data.data; 
+        setUser(userData, rememberMe)
+        router.push('/')
+      } else {
+        // Handle detailed error information
+        let errorMessage = result.error || 'An unexpected error occurred. Please try again.'
+        
+        // If there are validation details, format them
+        if (result.details) {
+          if (Array.isArray(result.details)) {
+            // Handle array of error messages
+            const detailMessages = result.details.join('; ')
+            if (detailMessages) {
+              errorMessage = detailMessages
+            }
+          } else if (typeof result.details === 'object') {
+            // Handle object with field names
+            const detailMessages = Object.entries(result.details)
+              .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+              .join('; ')
+            if (detailMessages) {
+              errorMessage = `${errorMessage} ${detailMessages}`
+            }
+          }
+        }
+        
+        setGeneralError(errorMessage)
+      }
+    } catch (error) {
+      setGeneralError('An unexpected error occurred. Please try again.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -72,6 +143,31 @@ export default function LoginPage() {
             <p className="text-gray-600">Sign in to your KindEarth account</p>
           </div>
 
+          {/* Success Message */}
+          {/* ??????? */}
+          {showSuccessMessage && (
+            <div className="mb-6">
+              <Alert
+                type="success"
+                title="Registration Successful!"
+                message="Your account has been created successfully. Please sign in with your credentials."
+                onClose={() => setShowSuccessMessage(false)}
+              />
+            </div>
+          )}
+
+          {/* General Error */}
+          {generalError && (
+            <div className="mb-6">
+              <Alert
+                type="error"
+                title="Login Failed"
+                message={generalError}
+                onClose={() => setGeneralError(null)}
+              />
+            </div>
+          )}
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Field */}
@@ -88,9 +184,10 @@ export default function LoginPage() {
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={handleInputChange}
+                  disabled={isLoading}
                   className={`pl-10 pr-4 py-3 border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.email ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 />
               </div>
               {errors.email && (
@@ -112,14 +209,16 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleInputChange}
+                  disabled={isLoading}
                   className={`pl-10 pr-12 py-3 border-2 rounded-lg transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.password ? "border-red-300 focus:border-red-500 focus:ring-red-200" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  disabled={isLoading}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -134,7 +233,10 @@ export default function LoginPage() {
               <label className="flex items-center">
                 <input
                   type="checkbox"
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={isLoading}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
                 />
                 <span className="ml-2 text-sm text-gray-600">Remember me</span>
               </label>
@@ -149,9 +251,17 @@ export default function LoginPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 rounded-lg transition-all duration-300 hover:shadow-lg hover:scale-[1.02]"
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 rounded-lg transition-all duration-300 hover:shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              Sign In
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Spinner size="sm" className="text-white" />
+                  Signing In...
+                </div>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </form>
 
@@ -166,7 +276,8 @@ export default function LoginPage() {
           <div className="space-y-3">
             <Button
               variant="outline"
-              className="w-full border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-300"
+              disabled={isLoading}
+              className="w-full border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-300 disabled:opacity-50"
             >
               <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                 <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -181,7 +292,7 @@ export default function LoginPage() {
           {/* Sign Up Link */}
           <div className="text-center mt-8">
             <p className="text-gray-600">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
               <Link
                 href="/register"
                 className="text-blue-600 hover:text-blue-700 font-semibold transition-colors"

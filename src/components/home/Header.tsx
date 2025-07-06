@@ -1,18 +1,48 @@
 "use client"
 
-import { Search, User, Store, Menu } from "lucide-react"
+import { Search, User, Store, Menu, LogOut, Settings, Heart, Package, UserCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import { useUser } from "@/components/providers/UserProvider"
 
 export default function Header() {
+  const { user, logout, isRemembered } = useUser()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  const handleLogout = () => {
+    logout()
+    setShowUserMenu(false)
+  }
+
+  // Helper function to safely check if user has a role
+  const hasRole = (role: string) => {
+    return user?.roles?.includes(role) || false
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       {/* Top Banner */}
-      <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white text-center py-2 text-sm font-medium">
-        <p>🎉 Join as a Vendor & Get 20% Commission! | Free Shipping on Orders Over $50</p>
+      <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white text-center py-2 px-4">
+        <p className="text-xs sm:text-sm font-medium leading-tight">
+          🎉 Join as a Vendor & Get 20% Commission! | Free Shipping on Orders Over $50
+        </p>
       </div>
 
       {/* Main Navigation */}
@@ -61,24 +91,122 @@ export default function Header() {
 
           {/* Right Side Actions */}
           <div className="flex items-center space-x-2">
-            {/* Vendor Button */}
-            <Link href="/register">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="hidden sm:flex items-center gap-2 border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white transition-all duration-300 font-semibold px-4 py-2 rounded-full hover:shadow-lg hover:scale-105"
-              >
-                <Store className="h-4 w-4" />
-                <span>Become Vendor</span>
-              </Button>
-            </Link>
+            {/* Vendor Button - Only show if not logged in or not a vendor */}
+            {(!user || !hasRole('Vendor')) && (
+              <Link href="/register">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="hidden sm:flex items-center gap-2 border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white transition-all duration-300 font-semibold px-4 py-2 rounded-full hover:shadow-lg hover:scale-105"
+                >
+                  <Store className="h-4 w-4" />
+                  <span>Become Vendor</span>
+                </Button>
+              </Link>
+            )}
 
-            {/* User Button */}
-            <Link href="/login">
-              <Button variant="ghost" size="icon" className="hover:bg-blue-50 hover:text-blue-600 transition-all duration-300 hover:scale-110">
-                <User className="h-5 w-5" />
-              </Button>
-            </Link>
+            {/* User Profile */}
+            {user ? (
+              <div className="relative">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="hover:bg-blue-50 hover:text-blue-600 transition-all duration-300 hover:scale-110"
+                  onClick={() => {
+                    console.log("showUserMenu", user)
+                    setShowUserMenu(!showUserMenu)
+                  }}
+                >
+                  <User className="h-5 w-5" />
+                </Button>
+                
+                {/* User Dropdown Menu */}
+                {showUserMenu && (
+                  <div 
+                    ref={userMenuRef}
+                    className="absolute right-0 mt-2 w-56 sm:w-64 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50 animate-in slide-in-from-top-2 duration-200"
+                  >
+                    {/* User Info Header */}
+                    <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-purple-50 rounded-t-xl">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                          <span className="text-white font-semibold text-sm">
+                            {user.firstName.charAt(0)} {user.lastName.charAt(0)}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-900">{user.firstName} {user.lastName}</p>
+                          <p className="text-xs text-gray-500">{user.email}</p>
+                          <div className="flex items-center gap-1 mt-1">
+                            <UserCheck className="h-3 w-3 text-blue-500" />
+                            <span className="text-xs text-blue-600 font-medium">
+                              {hasRole('Admin') ? 'Administrator' : 
+                               hasRole('Vendor') ? 'Vendor' : 'Customer'}
+                            </span>
+                            {isRemembered && (
+                              <span className="text-xs text-green-600 ml-1">• Remembered</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-1">
+                      <Link href="/profile" className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                        <User className="h-4 w-4 text-gray-500" />
+                        My Profile
+                      </Link>
+                      <Link href="/orders" className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Package className="h-4 w-4 text-gray-500" />
+                        My Orders
+                      </Link>
+                      <Link href="/wishlist" className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Heart className="h-4 w-4 text-gray-500" />
+                        Wishlist
+                      </Link>
+                      <Link href="/settings" className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Settings className="h-4 w-4 text-gray-500" />
+                        Settings
+                      </Link>
+                      
+                      {/* Vendor Dashboard Link */}
+                      {hasRole('Vendor') && (
+                        <Link href="/vendor/dashboard" className="flex items-center gap-3 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors border-t border-gray-100">
+                          <Store className="h-4 w-4" />
+                          Vendor Dashboard
+                        </Link>
+                      )}
+                      
+                      {/* Admin Dashboard Link */}
+                      {hasRole('Admin') && (
+                        <Link href="/admin/dashboard" className="flex items-center gap-3 px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 transition-colors border-t border-gray-100">
+                          <Settings className="h-4 w-4" />
+                          Admin Dashboard
+                        </Link>
+                      )}
+                    </div>
+
+                    {/* Logout Button */}
+                    <div className="border-t border-gray-100 pt-1">
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link href="/login">
+                <Button variant="ghost" size="icon" className="hover:bg-blue-50 hover:text-blue-600 transition-all duration-300 hover:scale-110">
+                  <User className="h-5 w-5" />
+                </Button>
+              </Link>
+            )}
 
             {/* Mobile Menu Button */}
             <Button
@@ -108,18 +236,35 @@ export default function Header() {
               <a href="#" className="block px-3 py-2 text-foreground hover:text-blue-600 hover:bg-blue-50 transition-all duration-300 rounded-md">
                 About
               </a>
-              <div className="px-3 py-2">
-                <Link href="/register">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full flex items-center justify-center gap-2 border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white transition-all duration-300 font-semibold rounded-full"
+              {(!user || !hasRole('Vendor')) && (
+                <div className="px-3 py-2">
+                  <Link href="/register">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full flex items-center justify-center gap-2 border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white transition-all duration-300 font-semibold rounded-full"
+                    >
+                      <Store className="h-4 w-4" />
+                      <span>Become Vendor</span>
+                    </Button>
+                  </Link>
+                </div>
+              )}
+              {user && (
+                <div className="px-3 py-2 border-t border-gray-200">
+                  <div className="px-3 py-2 text-sm text-gray-600">
+                    <p className="font-medium">{user.firstName} {user.lastName}</p>
+                    <p className="text-xs text-gray-500">{user.email}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-all duration-300 rounded-md flex items-center gap-2"
                   >
-                    <Store className="h-4 w-4" />
-                    <span>Become Vendor</span>
-                  </Button>
-                </Link>
-              </div>
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
